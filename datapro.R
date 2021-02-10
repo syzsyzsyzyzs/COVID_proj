@@ -8,8 +8,8 @@ require(ncdf4)
 require(maptools)
 # require(psych)
 require(ggplot2)
-setwd('/Users/Jayson/Documents/Git/Covid_proj/')
-# setwd('F:\\stat6110_proj')
+# setwd('/Users/Jayson/Documents/Git/Covid_proj/')
+setwd('F:\\COVID_proj')
 raw_data <- read.csv(file='https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv')
 bdy_data <- rgdal::readOGR('./Data/ne_10m_admin_0_countries/ne_10m_admin_0_countries.shp')
 weather_data <- raster::brick('./Data/globalWeather.grib')
@@ -18,9 +18,17 @@ crs <- weather_data@crs
 crs(bdy_data) <- crs
 weather_data_1 <- rotate(weather_data)
 
+# Generate out dataFrame
+raw_data_1 <- subset(raw_data, select=c(iso_code:total_cases, total_deaths, total_cases_per_million,
+                                      population_density:gdp_per_capita, stringency_index, population,
+                                      handwashing_facilities:human_development_index))
+raw_data_1$Days_100th = 0
+raw_data_1 = raw_data_1[,c(ncol(raw_data_1),1:(ncol(raw_data_1)-1))]
+View(subset(raw_data_1, total_cases>100, select=Days_100th))
+is.na(raw_data_1[raw_data_1$total_cases>100,"Days_100th"])
+View(head(raw_data_1, n=50))
 
-
-
+# ————————————————————————
 ctry_data <- read.csv('./Data/out.csv')
 ctry_bdy <- readShapePoly('./Data/ne_10m_admin_0_countries/ne_10m_admin_0_countries.shp')
 raw_data_0 <- brick(readGDAL('/Users/Jayson/Documents/python_practice/stat6110_proj/Data/grib/ClimateData.grib'))
