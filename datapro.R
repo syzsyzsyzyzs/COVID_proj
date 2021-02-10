@@ -8,10 +8,18 @@ require(ncdf4)
 require(maptools)
 # require(psych)
 require(ggplot2)
-setwd('/Users/Jayson/Documents/python_practice/stat6110_proj')
+setwd('/Users/Jayson/Documents/Git/Covid_proj/')
 # setwd('F:\\stat6110_proj')
 raw_data <- read.csv(file='https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv')
-weather_data <- readGDAL('./Data/globalWeather.grib')
+bdy_data <- rgdal::readOGR('./Data/ne_10m_admin_0_countries/ne_10m_admin_0_countries.shp')
+weather_data <- raster::brick('./Data/globalWeather.grib')
+
+crs <- weather_data@crs
+crs(bdy_data) <- crs
+weather_data_1 <- rotate(weather_data)
+
+
+
 
 ctry_data <- read.csv('./Data/out.csv')
 ctry_bdy <- readShapePoly('./Data/ne_10m_admin_0_countries/ne_10m_admin_0_countries.shp')
