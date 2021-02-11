@@ -17,66 +17,89 @@ weather_data <- raster::brick('./Data/globalWeather.grib')
 crs <- weather_data@crs
 crs(bdy_data) <- crs
 weather_data_1 <- rotate(weather_data)
-
+# save.image(file='loadRawData.RData')
+load(file='loadRawData.RData')
 # Generate out dataFrame
 raw_data_1 <- subset(raw_data, select=c(iso_code:total_cases, total_deaths, total_cases_per_million,
                                       population_density:gdp_per_capita, stringency_index, population,
                                       handwashing_facilities:human_development_index))
 raw_data_1$Days_100th = 0
 raw_data_1 = raw_data_1[,c(ncol(raw_data_1),1:(ncol(raw_data_1)-1))]
-View(subset(raw_data_1, total_cases>100, select=Days_100th))
-is.na(raw_data_1[raw_data_1$total_cases>100,"Days_100th"])
-View(head(raw_data_1, n=50))
+raw_data_1[is.na(raw_data_1[,'total_cases']),'total_cases'] <- 0
+raw_data_1[raw_data_1$total_cases>100, 'Days_100th'] <- 1
 
-# ————————————————————————
-ctry_data <- read.csv('./Data/out.csv')
-ctry_bdy <- readShapePoly('./Data/ne_10m_admin_0_countries/ne_10m_admin_0_countries.shp')
-raw_data_0 <- brick(readGDAL('/Users/Jayson/Documents/python_practice/stat6110_proj/Data/grib/ClimateData.grib'))
+for (i in 2:nrow(raw_data_1)){
+  if (raw_data_1[i,'Days_100th'] > raw_data_1[i-1,'Days_100th']){
+    raw_data_1[i,'Days_100th'] <- 2
+  }
+}
 
-crs <- raw_data_0@crs
-crs(ctry_bdy) <- crs # VERY IMPORTANT!!!!!
-raw_data <- rotate(raw_data_0)
+raw_data_2 <- raw_data_1[raw_data_1$Days_100th>0,]
+
+for (i in 1:nrow(raw_data_2)){
+  if (raw_data_2[i,'Days_100th']==2){
+    raw_data_2[i,'Days_100th'] <- 1
+  } else if (raw_data_2[i,'Days_100th']==1){
+    raw_data_2[i,'Days_100th'] = raw_data_2[i-1,'Days_100th']+1
+  }
+}
+
+raw_data_2$before_date <- as.Date(raw_data_2$date)-14
+raw_data_2$month <- as.double(format(as.Date(raw_data_2$date), "%m"))
+raw_data_2$before_month <- as.double(format(as.Date(raw_data_2$before_date), "%m"))
+
+View(head(raw_data_2, n=1000))
 
 # Correct the ISO code for countries.
-levels(ctry_bdy@data$ISO_A3) <- c(levels(ctry_bdy@data$ISO_A3),'FRA', 'NOR', 'OWID_KOS')
-ctry_bdy[ctry_bdy$NAME == 'France',"ISO_A3"] <- 'FRA'
-ctry_bdy[ctry_bdy$NAME == 'Norway',"ISO_A3"] <- 'NOR'
-ctry_bdy[ctry_bdy$NAME == 'Kosovo',"ISO_A3"] <- 'OWID_KOS'
+levels(bdy_data@data$ISO_A3) <- c(levels(bdy_data@data$ISO_A3),'FRA', 'NOR', 'OWID_KOS')
+bdy_data[bdy_data$NAME == 'France',"ISO_A3"] <- 'FRA'
+bdy_data[bdy_data$NAME == 'Norway',"ISO_A3"] <- 'NOR'
+bdy_data[bdy_data$NAME == 'Kosovo',"ISO_A3"] <- 'OWID_KOS'
+
+bdy_data$NAME
+ctry_data_1week[ctry_data_1week$iso_code == 'DMA',]
 
 name <- vector()
-for (i in 1:7){
-  for (j in c('EWind','NWind','dewP','AirTemp','SkinTemp','radia','precip')){
+weather_para <- c('EWind','NWind','dewP','AirTemp','radia','precip')
+num_weather_para <- length(weather_para)
+for (i in 1:(dim(weather_data_1)[3]/6)){
+  for (j in weather_para){
     name <- append(name,sprintf('%s_%d',j,i))
   }
 }
-names(raw_data) <- name
+names(weather_data_1) <- name
 
-ctry_data_1week <- ctry_data[ctry_data$Days_100th==30,]
+ctry_data_1week <- raw_data_2[raw_data_2$Days_100th==7,]
 ctry_list <- ctry_data_1week$iso_code
-
-ctry_mean_data <- matrix(NA, 0, 6)
+ctry_list <- ctry_list[ctry_list!=""]
+ctry_mean_data <- matrix(NA, 0, num_weather_para-1)
 ctry_col <- vector()
 counter <- 0
 for (i in ctry_list){
   # print(class(i))
   # i <- ctry_list[42]
-  temp_ctry_bdy <- ctry_bdy[ctry_bdy$ISO_A3 == i,]
+  temp_ctry_bdy <- bdy_data[bdy_data$ISO_A3 == i,]
   before_month <- ctry_data_1week[ctry_data_1week$iso_code==i,'before_month']
-  if ((length(temp_ctry_bdy) != 0) & (before_month < 8)){
-    climate_ctry_info <- extract(raw_data, temp_ctry_bdy, layer = before_month*7-6, nl= 7)
+  if ((length(temp_ctry_bdy) != 0) & (before_month <= (length(name)/num_weather_para))){
+    climate_ctry_info <- extract(weather_data_1, temp_ctry_bdy, 
+                                 layer=(before_month-1)*num_weather_para+1,
+                                 nl=num_weather_para)
   } else{
     print(sprintf('%s FAILED!!!', i))
     next
   }
   climate_ctry_info_0 <- na.omit(climate_ctry_info[[1]])
   Wind <- sqrt((climate_ctry_info_0[,1])^2+(climate_ctry_info_0[,2]^2))
-  climate_ctry_info_1 <- cbind(Wind,matrix(climate_ctry_info_0[,3:7], ncol=5))
-  temp_ctry_meaninfo <- matrix(apply(climate_ctry_info_1, MARGIN = 2, mean),1,6)
+  climate_ctry_info_1 <- cbind(Wind,
+                               matrix(climate_ctry_info_0[,3:ncol(climate_ctry_info_0)], 
+                                      ncol=num_weather_para-2))
+  temp_ctry_meaninfo <- matrix(apply(climate_ctry_info_1, MARGIN = 2, mean),1,num_weather_para-1)
   ctry_mean_data <- rbind(ctry_mean_data,temp_ctry_meaninfo)
   ctry_col <- append(ctry_col, i)
   counter <- counter + 1
-  print(sprintf('%s is extracted! - %d/180', i, counter))
+  print(sprintf('%s is extracted! - %d/%d', i, counter, length(ctry_list)))
 }
+
 ctry_mean_info <- cbind(data.frame(ctry_col),data.frame(ctry_mean_data))
 ctry_mean_info <- ctry_mean_info[!is.nan(ctry_mean_info$X1),]
 colnames(ctry_mean_info) <- c('iso_A3','Wind','dew_T','Air_T','Skin_T','radia','precip')
